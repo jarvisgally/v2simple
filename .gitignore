@@ -1,0 +1,4 @@
+*.DS_Store
+.idea/
+bin/*.json
+bin/v2simple*
