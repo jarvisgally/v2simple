@@ -136,7 +136,7 @@ func main() {
 					return
 				}
 
-				// 匹配路由，在直接访问清单里面的域名/ip/cidr直接访问，否则通过代理访问
+				// 匹配路由
 				if conf.Route == whitelist { // 白名单模式，如果匹配，则直接访问，否则使用代理访问
 					if matcher.Check(targetAddr.Host()) {
 						client = directClient

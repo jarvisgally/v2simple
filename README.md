@@ -1,5 +1,5 @@
 # v2simple
-该项目实现了一个简单版本的V2Ray。如果你对V2Ray等代理软件的运行机制很好奇，又没有时间研究其庞杂的实现，不妨关注此项目，核心代码不过100行，其余代码就是各种协议的具体实现。
+该项目实现了一个简单版本的V2Ray。如果你对V2Ray等代理软件的运行机制很好奇，又没有时间研究其庞杂的实现，不妨关注此项目，核心代码不过100行，其余代码则是各种协议的具体实现。
 
 目前实现了 [VMess协议]([https://www.v2fly.org/developer/protocols/vmess.html) 的客户端和服务端以及一个简洁的路由，只需简单配置即可无缝对接如下配置的V2Ray客户端或者服务端：
  * [国内直连](https://guide.v2fly.org/basics/routing/cndirect.html)
@@ -13,6 +13,8 @@
  * 流量统计以及用户管理
  * DNS服务
 
+接下来继续完成的功能点：
+ * 支持UDP
 
 ## 编译和使用
 
@@ -84,25 +86,111 @@ FQ技术则通过加密和伪装等方案突破网络审查，目前普遍采用
 
 [TODO：图]
 
-V2Ray灵活的配置使得其能够胜任上述的各种情况，比如多入口多出口路由就尤其适用于中转服务器，内建多种协议配合使用也能够满足各种用户需求和多样的网络环境，VMess协议是V2Ray的原创协议，主要解决了两个问题：
+V2Ray灵活的配置使得其能够胜任上述的各种情况，比如多入口多出口路由就尤其适用于中转服务器，内建多种协议配合使用也能够满足各种用户需求和多样的网络环境， [VMess协议]([https://www.v2fly.org/developer/protocols/vmess.html) 是V2Ray的原创协议，主要解决了两个问题：
  * 用户的鉴权
  * 数据的加密
 
 
 ## 核心代码
 
+```bash
++ 启动TCP监听 - net.Listen
++   持续等待连接 - go for listener.accept
++     处理连接 - go server.handshake -> route -> client.handshake
++       转发 - go io.copy
+```
 
-## TODO
+[TODO：图]
+
+```go
+// 开启本地的TCP监听
+listener, err := net.Listen("tcp", localServer.Addr())
+if err != nil {
+    log.Printf("can not listen on %v: %v", localServer.Addr(), err)
+    os.Exit(-1)
+}
+log.Printf("%v listening TCP on %v", localServer.Name(), localServer.Addr())
+go func() {
+    for {
+        lc, err := listener.Accept()
+        if err != nil {
+            errStr := err.Error()
+            if strings.Contains(errStr, "closed") {
+                break
+            }
+            log.Printf("failed to accepted connection: %v", err)
+            if strings.Contains(errStr, "too many") {
+                time.Sleep(time.Millisecond * 500)
+            }
+            continue
+        }
+        go func() {
+            defer lc.Close()
+            var client proxy.Client
+
+            // 不同的服务端协议各自实现自己的响应逻辑, 其中返回的地址则用于匹配路由
+            // 常常需要额外编解码或者流量统计的功能，故需要给lc包一层以实现这些逻辑，即wlc
+            wlc, targetAddr, err := localServer.Handshake(lc)
+            if err != nil {
+                log.Printf("failed in handshake from %v: %v", localServer.Addr(), err)
+                return
+            }
+
+            // 匹配路由
+            if conf.Route == whitelist { // 白名单模式，如果匹配，则直接访问，否则使用代理访问
+                if matcher.Check(targetAddr.Host()) {
+                    client = directClient
+                } else {
+                    client = remoteClient
+                }
+            } else if conf.Route == blacklist { // 黑名单模式，如果匹配，则使用代理访问，否则直接访问
+                if matcher.Check(targetAddr.Host()) {
+                    client = remoteClient
+                } else {
+                    client = directClient
+                }
+            } else { // 全部流量使用代理访问
+                client = remoteClient
+            }
+            log.Printf("%v to %v", client.Name(), targetAddr)
+
+            // 连接远端地址
+            dialAddr := remoteClient.Addr()
+            if _, ok := client.(*direct.Direct); ok { // 直接访问则直接连接目标地址
+                dialAddr = targetAddr.String()
+            }
+            rc, err := net.Dial("tcp", dialAddr)
+            if err != nil {
+                log.Printf("failed to dail to %v: %v", dialAddr, err)
+                return
+            }
+            defer rc.Close()
+
+            // 不同的客户端协议各自实现自己的请求逻辑
+            wrc, err := client.Handshake(rc, targetAddr.String())
+            if err != nil {
+                log.Printf("failed in handshake to %v: %v", dialAddr, err)
+                return
+            }
+
+            // 流量转发
+            go io.Copy(wrc, wlc)
+            io.Copy(wlc, wrc)
+        }()
+    }
+}()
+```
 
 
 ## Credits
 
-感谢：
-
+该项目参考了如下资源：
  * [你也能写个 Shadowsocks](https://github.com/gwuhaolin/blog/issues/12) ，当前项目参考了里面关于SOCKS5协议的实现；如果标题党一下，本文也可改为「你也能撸一个 V2Ray」吧
- * 
+ * [Clash](https://github.com/Dreamacro/clash)
+ * [Trojan-Go](https://github.com/p4gefau1t/trojan-go)
+ * [V2Ray](https://github.com/v2fly/v2ray-core)
 
 
-## 最后
+## 小结
 
 因为学习Go语言和对FQ技术感兴趣的缘故，花了两三个星期完成此项目，深感Go语言的强大。
