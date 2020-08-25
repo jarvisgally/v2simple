@@ -15,6 +15,8 @@
 
 接下来继续完成的功能点：
  * 支持UDP
+ * 支持[VLess](https://github.com/v2ray/v2ray-core/issues/2636)
+
 
 ## 编译和使用
 
@@ -62,12 +64,12 @@ bin/v2simple -f server.json
  * `vmess`：支持客户端和服务端
  * `vmesss`：使用tls的vmess，同样支持客户端和服务端，服务端还需要额外指定域名的证书和私钥地址
 
-事实上纯vmess的协议是也是基于TCP的，在Q看来是未知协议的TCP连接，此乃最大特征，因此不推荐使用，在例子中均使用了`vmesss`，伪装成常规的https流量；这需要预先注册一个域名并申请TLS证书，具体做法可以参考[这里](https://guide.v2fly.org/advanced/tls.html) 。
+注：纯vmess的协议是是基于TCP的，不推荐裸奔；在例子中我们均使用了`vmesss`，即伪装成常规的https流量；这需要预先注册一个域名并申请TLS证书，具体做法可以参考[这里](https://guide.v2fly.org/advanced/tls.html) 。
 
 `route`项表示路由模式，目前支持如下模式：
  * `whitelist`：白名单模式，如果匹配，则直接访问，否则通过代理访问
  * `blacklist`：黑名单模式，如果匹配，则通过代理访问，否则直接访问
- * 空白：不做匹配，全部流量通过代理访问，见上述`server.json`
+ * 空白：不做匹配，全部流量通过代理访问
 
 目前项目中仅包含`whitelist`，每一行是一个域名、IP或者CIDR，来自V2Ray的`geosite:cn`、`geoip:cn`和`geoip:private`。
 
@@ -90,17 +92,30 @@ V2Ray灵活的配置使得其能够胜任上述的各种情况，比如多入口
  * 用户的鉴权
  * 数据的加密
 
+本质上是对流量增加了一层编解码的逻辑，在Q看来是未知协议的TCP连接，此乃最大特征，至少在敏感时期就可以轻易被Q阻断，因此一般建议配合TLS或者WS来使用。
+
 
 ## 核心代码
 
-```bash
+V2Ray的调用栈大致如下，层层叠叠的调用导致代码比较复杂，此处仅供参考：
+```
++ InboundHandler.Start() - 入口启动
++   Worker.Start() - 启动TCP和UDP监听，并持续等待连接
++     Server.Process()
++       Server.processTCP() & Server.handleUDPPayload() - 处理连接
++       Server.transport() - 传输逻辑
++         DefaultDispatcher.Dispatch() - 路由逻辑
++           OutboundHandler.Dispatch() - 根据路由设置匹配到不同的出口
++             Client.Process() - 连接远端并转发流量
+```
+
+V2Simple的核心逻辑都在`main.go`中，通过三个go关键字，比较简单的就实现了支持多个连接的流量转发的逻辑：
+```
 + 启动TCP监听 - net.Listen
 +   持续等待连接 - go for listener.accept
 +     处理连接 - go server.handshake -> route -> client.handshake
 +       转发 - go io.copy
 ```
-
-[TODO：图]
 
 ```go
 // 开启本地的TCP监听
@@ -182,12 +197,11 @@ go func() {
 ```
 
 
-## Credits
+## 参考
 
 该项目参考了如下资源：
- * [你也能写个 Shadowsocks](https://github.com/gwuhaolin/blog/issues/12) ，当前项目参考了里面关于SOCKS5协议的实现；如果标题党一下，本文也可改为「你也能撸一个 V2Ray」吧
- * [Clash](https://github.com/Dreamacro/clash)
- * [Trojan-Go](https://github.com/p4gefau1t/trojan-go)
+ * [你也能写个 Shadowsocks](https://github.com/gwuhaolin/blog/issues/12) ，当前项目参考了里面关于SOCKS5协议的实现；如果标题党一下，本文或许也可改为「你也能撸一个 V2Ray」吧
+ * [Clash](https://github.com/Dreamacro/clash) ，VMess的客户端部分
  * [V2Ray](https://github.com/v2fly/v2ray-core)
 
 
