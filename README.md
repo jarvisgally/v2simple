@@ -1,7 +1,7 @@
 # V2Simple
 该项目实现了一个简单版本的V2Ray。如果你对V2Ray等代理软件的运行机制很好奇，又没有时间研究其庞杂的实现，不妨关注此项目，核心代码不过100行，其余代码则是各种协议的具体实现。
 
-目前实现了 [VMess协议]([https://www.v2fly.org/developer/protocols/vmess.html) 的客户端和服务端以及一个简洁的路由，只需简单配置即可无缝对接如下配置的V2Ray客户端或者服务端：
+目前实现了 [VMess协议](https://www.v2fly.org/developer/protocols/vmess.html) 的客户端和服务端以及一个简洁的路由，只需简单配置即可无缝对接如下配置的V2Ray客户端或者服务端：
  * [国内直连](https://guide.v2fly.org/basics/routing/cndirect.html)
  * [TLS](https://guide.v2fly.org/advanced/tls.html) 
  * [TLS分流器](https://guide.v2fly.org/advanced/tcp_tls_shunt_proxy.html) ，内建了一个简单的TLS分流器，无需额外安装 [分流器](https://github.com/liberal-boy/tls-shunt-proxy)
@@ -76,17 +76,17 @@ bin/v2simple -f server.json
 
 ## FQ原理和VMess协议
 
-FQ技术则通过加密和伪装等方案突破网络审查，目前普遍采用的方式都是客户端-服务端的方式；在客户端也就是用户自己的机器上，在流量进入互联网之前，对流量进行加密和伪装，从而穿透Q的层层审查，然后在服务端还原为原始的流量访问目标网站；服务端必须是Q外的服务器。
+FQ技术则通过加密和伪装等方案突破网络审查，目前普遍采用的方式都是客户端-服务端的方式；在客户端也就是用户自己的机器上，在流量进入互联网之前，对流量进行加密和伪装，从而穿透Q的层层审查，然后在服务端还原为原始的流量访问目标网站；服务端必须是Q外的服务器，如下图所示：
 
-<img src="images/client-server.png" height="300"/>
+<img src="images/client-server.png" height="400"/>
 
-由于用户的网络环境五花八门，而且国际出口拥堵的时候会对一般线路降权处理，因此不少FQ服务商会在国内增加一个BGP节点进行中转；如，长城宽带没有自己的国际出口，是向电信和联通租用的国际出口，会限制访问国外网站的速度和稳定性（我个人经验是有可能限制在2Mbps下），通过国内中转节点的话就能避免这个问题。
+由于用户的网络环境五花八门，而且国际出口拥堵的时候会对一般线路降权处理，因此不少FQ服务商会在国内增加一个BGP节点进行中转；如，长城宽带没有自己的国际出口，是向电信和联通租用的国际出口，会限制访问国外网站的速度和稳定性（我个人经验是有可能限制在2Mbps下），通过国内中转节点的话就能避免这个问题，如下图所示：
+
+<img src="images/client-forward-server.png" height="400"/>
 
 现在也有不少号称国际专线的方案，亮点在于国内外节点是通过一条物理专线进行直连，完全不会被受到审查；专线原本是服务于跨国企业的，非常贵并且需要持有资质；成本在那，就必然有超卖的情况，而且企业专线和机场混在一起做，最大概率就是普通客户出事，导致企业客户一起连带不能用；是成本和风险都比较高的解决方案。
 
-<img src="images/client-forward-server.png" height="300"/>
-
-V2Ray灵活的配置使得其能够胜任上述的各种情况，比如多入口多出口路由就尤其适用于中转服务器，内建多种协议配合使用也能够满足各种用户需求和多样的网络环境，[VMess协议]([https://www.v2fly.org/developer/protocols/vmess.html) 是V2Ray的原创协议，主要解决了两个问题：
+V2Ray灵活的配置使得其能够胜任上述的各种情况，比如多入口多出口路由就尤其适用于中转服务器，内建多种协议配合使用也能够满足各种用户需求和多样的网络环境，[VMess协议](https://www.v2fly.org/developer/protocols/vmess.html) 是V2Ray的原创协议，主要解决了两个问题：
  * 用户的鉴权
  * 数据的加密
 
