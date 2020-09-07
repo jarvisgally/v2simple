@@ -4,9 +4,9 @@
 目前实现了 [VMess协议](https://www.v2fly.org/developer/protocols/vmess.html) 的客户端和服务端以及一个简洁的路由，只需简单配置即可无缝对接如下配置的V2Ray客户端或者服务端：
  * [国内直连](https://guide.v2fly.org/basics/routing/cndirect.html)
  * [TLS](https://guide.v2fly.org/advanced/tls.html) 
- * [TLS分流器](https://guide.v2fly.org/advanced/tcp_tls_shunt_proxy.html) ，内建了一个简单的TLS分流器，无需额外安装 [分流器](https://github.com/liberal-boy/tls-shunt-proxy)
 
 以下V2Ray的功能**暂不支持**：
+ * UDP
  * VMess协议的AEAD认证以及动态端口
  * 多入口多出口路由
  * Mux/mKCP/WebSocket/H2等协议
@@ -14,7 +14,6 @@
  * DNS服务
 
 接下来继续完成的功能点：
- * 支持UDP
  * 支持[VLess](https://github.com/v2ray/v2ray-core/issues/2636)
 
 <br>
@@ -54,16 +53,25 @@ bin/v2simple -f server.json
 服务端模式`server.example.json`：
 ```json
 {
-  "local": "vmesss://a684455c-b14f-11ea-bf0d-42010aaa0003@0.0.0.0:443?alterID=4&cert=<fix-me>&key=<fix-me>",
+  "local": "vmesss://a684455c-b14f-11ea-bf0d-42010aaa0003@0.0.0.0:443?alterID=4&cert=<fix-me>&key=<fix-me>&fallback=:80",
   "remote": "direct://"
 }
 ```
 
-其中`local`项标识本地服务的协议，`remote`项标识远端服务器的协议，目前支持的协议：
+其中`local`项标识本地服务的协议，`remote`项标识远端服务的协议，目前支持的协议：
  * `socks5`：仅服务端，用于监听本地的socks5代理请求
  * `direct`：直连
  * `vmess`：支持客户端和服务端
+```
+vmess://uuid[:alterId]@host:port?[&security=none|aes-128-gcm|chacha20-poly1305]
+    - 其中security在服务端模式下是无需设置的，服务端会根据客户端的请求自动匹配
+```
  * `vmesss`：使用tls的vmess，同样支持客户端和服务端，服务端还需要额外指定域名的证书和私钥地址
+```
+vmesss://uuid[:alterId]@host:port?[&security=none|aes-128-gcm|chacha20-poly1305][&fallback=:80]
+    - security：在服务端模式下是无需设置的，服务端会根据客户端的请求自动匹配
+    - fallback: 即使用http直接访问443端口会转跳到此地址
+``` 
 
 注：纯vmess的协议是是基于TCP的，不推荐裸奔；在例子中我们均使用了`vmesss`，即伪装成常规的https流量；这需要预先注册一个域名并申请TLS证书，具体做法可以参考[这里](https://guide.v2fly.org/advanced/tls.html) 。
 

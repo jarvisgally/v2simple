@@ -3,7 +3,10 @@ package tls
 import (
 	stdtls "crypto/tls"
 	"errors"
+	"fmt"
+	"github.com/jarvisgally/v2simple/common"
 	"io"
+	"log"
 	"net"
 	"net/url"
 	"strings"
@@ -27,14 +30,15 @@ func NewTlsServer(url *url.URL) (proxy.Server, error) {
 		return nil, err
 	}
 	fallback := query.Get("fallback")
+	var fallbackAddr *proxy.TargetAddr
 	if fallback != "" {
-		_, _, err = net.SplitHostPort(fallback)
+		fallbackAddr, err = proxy.NewTargetAddr(fallback)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid fallback %v", fallbackAddr)
 		}
 	}
 
-	s := &Server{name: url.Scheme, addr: addr, fallback: fallback}
+	s := &Server{name: url.Scheme, addr: addr, fallbackAddr: fallbackAddr}
 	s.tlsConfig = &stdtls.Config{
 		InsecureSkipVerify: false,
 		ServerName:         sni,
@@ -50,7 +54,7 @@ func NewTlsServer(url *url.URL) (proxy.Server, error) {
 type Server struct {
 	name      string
 	addr      string
-	fallback  string
+	fallbackAddr *proxy.TargetAddr
 	tlsConfig *stdtls.Config
 
 	inner proxy.Server
@@ -61,13 +65,25 @@ func (s *Server) Name() string { return s.name }
 func (s *Server) Addr() string { return s.addr }
 
 func (s *Server) Handshake(underlay net.Conn) (io.ReadWriter, *proxy.TargetAddr, error) {
-	ss := stdtls.Server(underlay, s.tlsConfig)
-	err := ss.Handshake()
+	tlsConn := stdtls.Server(underlay, s.tlsConfig)
+	err := tlsConn.Handshake()
 	if err != nil {
 		return nil, nil, errors.New("invalid handshake")
 	}
-	// TODO: Check if a http request, redirect to fallback address
-	return s.inner.Handshake(ss)
+	sniffConn := common.NewSniffConn(tlsConn)
+	t := sniffConn.Sniff()
+	if t == common.TypeUnknown {
+		// this is not a http request, route to inner protocol, e.g, vmess/trojan
+		return s.inner.Handshake(sniffConn)
+	} else {
+		// http request, route to fallback address
+		if s.fallbackAddr != nil {
+			log.Printf("http request, redirect to %v", s.fallbackAddr)
+			return sniffConn, s.fallbackAddr, nil
+		} else {
+			return nil, nil, errors.New("not supported")
+		}
+	}
 }
 
 func (s *Server) Stop() {

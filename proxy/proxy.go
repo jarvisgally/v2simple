@@ -106,3 +106,23 @@ func (a *TargetAddr) Host() string {
 	}
 	return a.IP.String()
 }
+
+func NewTargetAddr(addr string) (*TargetAddr, error) {
+	host, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return nil, err
+	}
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port, err := strconv.Atoi(portStr)
+
+	target := &TargetAddr{Port: port}
+	if ip := net.ParseIP(host); ip != nil {
+		target.IP = ip
+	} else {
+		target.Name = host
+	}
+	return target, nil
+}
+

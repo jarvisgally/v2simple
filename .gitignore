@@ -1,4 +1,6 @@
 *.DS_Store
 .idea/
-bin/*.json
-bin/v2simple*
+bin/*
+!bin/.keep
+server.crt
+server.key

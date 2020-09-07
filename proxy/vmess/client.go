@@ -33,16 +33,17 @@ func NewVmessClient(url *url.URL) (proxy.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	query := url.Query()
-	aid := query.Get("alterID")
-	if aid == "" {
-		aid = "4"
+	alterIDStr, ok := url.User.Password()
+	if !ok {
+		alterIDStr = "4"
 	}
-	alterID, err := strconv.ParseUint(aid, 10, 32)
+	alterID, err := strconv.ParseUint(alterIDStr, 10, 32)
 	if err != nil {
 		log.Printf("parse alterId err: %v", err)
 		return nil, err
 	}
+	query := url.Query()
+
 	security := query.Get("security")
 	if security == "" {
 		security = "none"

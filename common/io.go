@@ -1,108 +1,89 @@
 package common
 
 import (
+	"bytes"
+	"errors"
 	"io"
-	"log"
 	"net"
 )
 
-type RewindReader struct {
-	rawReader  io.Reader
-	buf        []byte
-	bufReadIdx int
-	rewound    bool
-	buffering  bool
-	bufferSize int
-}
+const (
+	TypeHttp = iota
+	TypeUnknown
+)
 
-func (r *RewindReader) Read(p []byte) (int, error) {
-	if r.rewound {
-		if len(r.buf) > r.bufReadIdx {
-			n := copy(p, r.buf[r.bufReadIdx:])
-			r.bufReadIdx += n
-			return n, nil
-		}
-		r.rewound = false //all buffering content has been read
+var (
+	httpMethods = [...][]byte{
+		[]byte("GET"),
+		[]byte("POST"),
+		[]byte("HEAD"),
+		[]byte("PUT"),
+		[]byte("DELETE"),
+		[]byte("OPTIONS"),
+		[]byte("CONNECT"),
+		[]byte("PRI"),
 	}
-	n, err := r.rawReader.Read(p)
-	if r.buffering {
-		r.buf = append(r.buf, p[:n]...)
-		if len(r.buf) > r.bufferSize*2 {
-			log.Print("read too many bytes!")
-		}
-	}
-	return n, err
-}
+	sep = []byte(" ")
+)
 
-func (r *RewindReader) ReadByte() (byte, error) {
-	buf := [1]byte{}
-	_, err := r.Read(buf[:])
-	return buf[0], err
-}
-
-func (r *RewindReader) Discard(n int) (int, error) {
-	buf := [128]byte{}
-	if n < 128 {
-		return r.Read(buf[:n])
-	}
-	for discarded := 0; discarded+128 < n; discarded += 128 {
-		_, err := r.Read(buf[:])
-		if err != nil {
-			return discarded, err
-		}
-	}
-	if rest := n % 128; rest != 0 {
-		return r.Read(buf[:rest])
-	}
-	return n, nil
-}
-
-func (r *RewindReader) Rewind() {
-	if r.bufferSize == 0 {
-		panic("no buffer")
-	}
-	r.rewound = true
-	r.bufReadIdx = 0
-}
-
-func (r *RewindReader) StopBuffering() {
-	r.buffering = false
-}
-
-func (r *RewindReader) SetBufferSize(size int) {
-	if size == 0 { //disable buffering
-		if !r.buffering {
-			panic("reader is disabled")
-		}
-		r.buffering = false
-		r.buf = nil
-		r.bufReadIdx = 0
-		r.bufferSize = 0
-	} else {
-		if r.buffering {
-			panic("reader is buffering")
-		}
-		r.buffering = true
-		r.bufReadIdx = 0
-		r.bufferSize = size
-		r.buf = make([]byte, 0, size)
-	}
-}
-
-type RewindConn struct {
+type SniffConn struct {
 	net.Conn
-	*RewindReader
+	rout         io.Reader
+	peeked, read bool
+	peeks        []byte
 }
 
-func (c *RewindConn) Read(p []byte) (int, error) {
-	return c.RewindReader.Read(p)
+func NewSniffConn(c net.Conn) *SniffConn {
+	s := &SniffConn{Conn: c, rout: c}
+	return s
 }
 
-func NewRewindConn(conn net.Conn) *RewindConn {
-	return &RewindConn{
-		Conn: conn,
-		RewindReader: &RewindReader{
-			rawReader: conn,
-		},
+func (c *SniffConn) Read(p []byte) (int, error) {
+	if !c.read {
+		c.read = true
+		c.rout = io.MultiReader(bytes.NewReader(c.peeks), c.Conn)
 	}
+	return c.rout.Read(p)
+}
+
+func (c *SniffConn) Sniff() int {
+	var err error
+	c.peeks, err = c.peek(64)
+	if err != nil && err != io.EOF {
+		return TypeUnknown
+	}
+
+	if c.sniffHttp() {
+		return TypeHttp
+	}
+
+	// TODO: May need to check more stream types
+
+	return TypeUnknown
+}
+
+func (c *SniffConn) peek(n int) ([]byte, error) {
+	if c.read {
+		return nil, errors.New("peek must before read")
+	}
+	if c.peeked {
+		return nil, errors.New("can only peek once")
+	}
+	c.peeked = true
+	peeks := make([]byte, n)
+	n, err := c.Conn.Read(peeks)
+	return peeks[:n], err
+}
+
+func (c *SniffConn) sniffHttp() bool {
+	parts := bytes.Split(c.peeks, sep)
+	if len(parts) < 2 {
+		return false
+	}
+	for _, m := range httpMethods {
+		if bytes.Compare(parts[0], m) == 0 {
+			return true
+		}
+	}
+	return false
 }
