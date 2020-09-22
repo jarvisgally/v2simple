@@ -64,7 +64,7 @@ bin/v2simple -f server.json
  * `vmess`：支持客户端和服务端
 ```
 vmess://uuid[:alterId]@host:port?[&security=none|aes-128-gcm|chacha20-poly1305]
- - 其中security在服务端模式下是无需设置的，服务端会根据客户端的请求自动匹配
+ - security：在服务端模式下是无需设置的，服务端会根据客户端的请求自动匹配
 ```
  * `vmesss`：使用tls的vmess，同样支持客户端和服务端，服务端还需要额外指定域名的证书和私钥地址
 ```
@@ -98,7 +98,7 @@ V2Ray的调用栈大致如下，层层叠叠的调用导致代码比较复杂，
 +             OutBoundHandler.Process() - 出口处理
 +               Dailer.Dailer() - 连接远端并转发流量
 ```
-更详细的说明请参考[V2Ray 源代码分析](https://medium.com/@jarvisgally/v2ray-%E6%BA%90%E4%BB%A3%E7%A0%81%E5%88%86%E6%9E%90-b4f8db55b0f6)。
+更详细的说明请参考 [V2Ray源码分析](https://medium.com/@jarvisgally/v2ray-%E6%BA%90%E4%BB%A3%E7%A0%81%E5%88%86%E6%9E%90-b4f8db55b0f6)。
 
 作为对比，V2Simple的核心逻辑都在`main.go`中，通过三个go关键字，比较简单的就实现了支持多个连接的流量转发逻辑：
 ```
@@ -190,7 +190,7 @@ go func() {
 
 <br>
 
-## FQ原理和VMess协议
+## VMess协议
 
 [VMess协议](https://www.v2fly.org/developer/protocols/vmess.html) 是V2Ray的原创协议，主要解决了两个问题：
  * 用户的鉴权
